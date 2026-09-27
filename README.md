@@ -1,14 +1,20 @@
 # AI-Assisted Engineering Lab
 
-A small, synthetic Mule 4 application for a reproducible exercise about AI-assisted software engineering. The repository separates an already working baseline from a later AI-assisted contract change, so observations can be checked against code and test results.
+A reusable, synthetic Mule 4 application for reproducible AI-assisted engineering articles. Each exercise has its own API contract, route prefix, Mule file, flow prefix and MUnit suite. The Maven artifact identifies the shared lab rather than the first exercise.
 
 The baseline was copied from the `customer-lookup-api-fixture` in [`mulesoft-agent-test-lab`](https://github.com/brunosouzas/mulesoft-agent-test-lab). Its MIT licence is retained. No customer, company or production data is included.
 
-## Baseline behaviour
+## Customer lookup exercise
 
-`GET /api/customers/{customerId}` returns a synthetic customer for `CUST-001`, `400` for an invalid identifier, `404` for a valid unknown identifier and a sanitised `500` for the controlled `CUST-500` case. The application preserves or creates a correlation ID.
+`GET /api/customer-lookup/customers/{customerId}` returns a synthetic customer for `CUST-001`. Invalid, unknown and inactive customers are business errors (`400`). A missing API endpoint returns `404`; unsupported methods, representations and media types use `405`, `406` and `415`; the controlled `CUST-500` system failure returns a sanitised `500`. Error bodies follow the shared `{ "error": { "code": number, "reason": string, "message": string } }` contract. Correlation IDs are carried in the `x-correlation-id` response header.
 
-## Reproduce the baseline
+The engineer's decision supersedes the original AI proposal, which suggested `200` for inactive `CUST-002`. See [the experiment record](docs/experiment.md) and [the preserved AI response](docs/codex-proposal-2026-09-27.md).
+
+## Naming for future exercises
+
+Keep the repository and Maven artifact named `ai-assisted-engineering-lab`. Give each exercise a descriptive slug: for example, `customer-lookup-api.raml`, `customer-lookup-api.xml`, `customer-lookup-*` flows and `customer-lookup-api-suite.xml`. Reserve `/api/<exercise-slug>/*` for its HTTP routes. Add another scenario with its own files and prefix instead of extending a generic `main` or `process` flow with unrelated behaviour.
+
+## Build and test
 
 Prerequisites: Java 17, Maven 3.9.8, and cached Mule dependencies or network access to the configured repositories. Run:
 
@@ -18,8 +24,8 @@ JAVA_HOME=/path/to/jdk-17 mvn -o clean package
 
 Remove `-o` when the dependencies have not been cached. MUnit starts a local Mule runtime and needs access to dynamic localhost ports. The application has no external service, credential or deployment target.
 
-On 27 September 2026, the local baseline build passed six MUnit tests with zero failures, errors or skips, and reported 60.00% application coverage. This is an observed result for that environment, not a project threshold. The tests exercise the handler directly; listener and APIKit routing are not directly covered.
+The copied baseline passed six MUnit tests with 60.00% application coverage on 27 September 2026. The updated contract is validated separately in the experiment record. These are observed results, not coverage thresholds. The current tests exercise the handler directly; listener and APIKit routing are not directly covered.
 
 ## Experiment record
 
-See [the experiment protocol](docs/experiment.md) for the prompt, engineering decision and evidence fields. Do not describe the baseline as AI-generated in this experiment. Record the actual AI proposal and the human decision before drawing conclusions for the article.
+See [the experiment record](docs/experiment.md) for the prompt, proposal, engineer decision and verification. The copied baseline was not AI-generated in this experiment.

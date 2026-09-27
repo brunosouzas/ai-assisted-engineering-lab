@@ -45,12 +45,12 @@
         </munit:execution>
         <munit:validation>
             <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(400)]"/>
-            <munit-tools:assert-that expression="#[payload.code]" is="#[MunitTools::equalTo('INVALID_CUSTOMER_ID')]"/>
-            <munit-tools:assert-that expression="#[payload.correlationId]" is="#[MunitTools::equalTo('corr-invalid')]"/>
+            <munit-tools:assert-that expression="#[payload.error.code]" is="#[MunitTools::equalTo(400)]"/>
+            <munit-tools:assert-that expression="#[vars.outboundHeaders.'x-correlation-id']" is="#[MunitTools::equalTo('corr-invalid')]"/>
         </munit:validation>
     </munit:test>
 
-    <munit:test name="unknown-customer-returns-404">
+    <munit:test name="unknown-customer-returns-business-400">
         <munit:behavior>
             <munit:set-event>
                 <munit:payload value="#[output application/java --- 'CUST-999']"/>
@@ -63,9 +63,29 @@
             <flow-ref name="customer-lookup-handler"/>
         </munit:execution>
         <munit:validation>
-            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(404)]"/>
-            <munit-tools:assert-that expression="#[payload.code]" is="#[MunitTools::equalTo('CUSTOMER_NOT_FOUND')]"/>
-            <munit-tools:assert-that expression="#[payload.message]" is="#[MunitTools::equalTo('Customer was not found.')]"/>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(400)]"/>
+            <munit-tools:assert-that expression="#[payload.error.code]" is="#[MunitTools::equalTo(400)]"/>
+            <munit-tools:assert-that expression="#[payload.error.message]" is="#[MunitTools::equalTo('Customer was not found.')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="inactive-customer-returns-business-400">
+        <munit:behavior>
+            <munit:set-event>
+                <munit:payload value="#[output application/java --- 'CUST-002']"/>
+                <munit:variables>
+                    <munit:variable key="requestCorrelationId" value="#[output application/java --- 'corr-inactive']"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="customer-lookup-handler"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(400)]"/>
+            <munit-tools:assert-that expression="#[payload.error.code]" is="#[MunitTools::equalTo(400)]"/>
+            <munit-tools:assert-that expression="#[payload.error.message]" is="#[MunitTools::equalTo('Customer is inactive.')]"/>
+            <munit-tools:assert-that expression="#[vars.outboundHeaders.'x-correlation-id']" is="#[MunitTools::equalTo('corr-inactive')]"/>
         </munit:validation>
     </munit:test>
 
@@ -83,9 +103,9 @@
         </munit:execution>
         <munit:validation>
             <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(500)]"/>
-            <munit-tools:assert-that expression="#[payload.code]" is="#[MunitTools::equalTo('INTERNAL_ERROR')]"/>
-            <munit-tools:assert-that expression="#[payload.message]" is="#[MunitTools::equalTo('An internal error occurred.')]"/>
-            <munit-tools:assert-that expression="#[sizeOf(payload)]" is="#[MunitTools::equalTo(3)]"/>
+            <munit-tools:assert-that expression="#[payload.error.code]" is="#[MunitTools::equalTo(500)]"/>
+            <munit-tools:assert-that expression="#[payload.error.message]" is="#[MunitTools::equalTo('An internal error occurred.')]"/>
+            <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is="#[MunitTools::equalTo(3)]"/>
         </munit:validation>
     </munit:test>
 

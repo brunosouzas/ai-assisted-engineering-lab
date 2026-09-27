@@ -21,7 +21,7 @@
                    httpStatusVarName="httpStatus"/>
 
     <flow name="customer-lookup-api-main">
-        <http:listener config-ref="http-listener-config" path="/api/*">
+        <http:listener config-ref="http-listener-config" path="/api/customer-lookup/*">
             <http:response statusCode="#[vars.httpStatus default 200]">
                 <http:headers>#[vars.outboundHeaders default {}]</http:headers>
             </http:response>
@@ -35,13 +35,37 @@
             <on-error-continue type="APIKIT:BAD_REQUEST" logException="false">
                 <set-variable variableName="httpStatus" value="#[400]"/>
                 <set-payload mimeType="application/json"
-                             value='#[output application/json --- { code: "INVALID_CUSTOMER_ID", message: "Customer identifier format is invalid.", correlationId: correlationId }]'/>
+                             value='#[output application/json --- { error: { code: 400, reason: "Bad Request", message: "The request is invalid." } }]'/>
                 <set-variable variableName="outboundHeaders" value="#[{'x-correlation-id': correlationId}]"/>
             </on-error-continue>
-            <on-error-continue type="APIKIT:NOT_FOUND,APIKIT:METHOD_NOT_ALLOWED,APIKIT:NOT_ACCEPTABLE,APIKIT:UNSUPPORTED_MEDIA_TYPE" logException="false">
-                <set-variable variableName="httpStatus" value="#[error.errorType.identifier == 'NOT_FOUND' ? 404 : 400]"/>
+            <on-error-continue type="APIKIT:NOT_FOUND" logException="false">
+                <set-variable variableName="httpStatus" value="#[404]"/>
                 <set-payload mimeType="application/json"
-                             value='#[output application/json --- { code: "REQUEST_NOT_SUPPORTED", message: "The request is not supported by this API.", correlationId: correlationId }]'/>
+                             value='#[output application/json --- { error: { code: 404, reason: "Not Found", message: "The requested API endpoint does not exist." } }]'/>
+                <set-variable variableName="outboundHeaders" value="#[{'x-correlation-id': correlationId}]"/>
+            </on-error-continue>
+            <on-error-continue type="APIKIT:METHOD_NOT_ALLOWED" logException="false">
+                <set-variable variableName="httpStatus" value="#[405]"/>
+                <set-payload mimeType="application/json"
+                             value='#[output application/json --- { error: { code: 405, reason: "Method Not Allowed", message: "The method is not allowed for this endpoint." } }]'/>
+                <set-variable variableName="outboundHeaders" value="#[{'x-correlation-id': correlationId}]"/>
+            </on-error-continue>
+            <on-error-continue type="APIKIT:NOT_ACCEPTABLE" logException="false">
+                <set-variable variableName="httpStatus" value="#[406]"/>
+                <set-payload mimeType="application/json"
+                             value='#[output application/json --- { error: { code: 406, reason: "Not Acceptable", message: "No acceptable representation is available." } }]'/>
+                <set-variable variableName="outboundHeaders" value="#[{'x-correlation-id': correlationId}]"/>
+            </on-error-continue>
+            <on-error-continue type="APIKIT:UNSUPPORTED_MEDIA_TYPE" logException="false">
+                <set-variable variableName="httpStatus" value="#[415]"/>
+                <set-payload mimeType="application/json"
+                             value='#[output application/json --- { error: { code: 415, reason: "Unsupported Media Type", message: "The request media type is not supported." } }]'/>
+                <set-variable variableName="outboundHeaders" value="#[{'x-correlation-id': correlationId}]"/>
+            </on-error-continue>
+            <on-error-continue type="ANY" logException="false">
+                <set-variable variableName="httpStatus" value="#[500]"/>
+                <set-payload mimeType="application/json"
+                             value='#[output application/json --- { error: { code: 500, reason: "Internal Server Error", message: "An internal error occurred." } }]' />
                 <set-variable variableName="outboundHeaders" value="#[{'x-correlation-id': correlationId}]"/>
             </on-error-continue>
         </error-handler>
@@ -65,17 +89,27 @@
                 <on-error-continue type="APP:INVALID_CUSTOMER_ID" logException="false">
                     <set-variable variableName="httpStatus" value="#[400]"/>
                     <set-payload mimeType="application/json"
-                                 value='#[output application/json --- { code: "INVALID_CUSTOMER_ID", message: "Customer identifier format is invalid.", correlationId: vars.effectiveCorrelationId }]'/>
+                                 value='#[output application/json --- { error: { code: 400, reason: "Bad Request", message: "Customer identifier format is invalid." } }]'/>
                 </on-error-continue>
                 <on-error-continue type="APP:CUSTOMER_NOT_FOUND" logException="false">
-                    <set-variable variableName="httpStatus" value="#[404]"/>
+                    <set-variable variableName="httpStatus" value="#[400]"/>
                     <set-payload mimeType="application/json"
-                                 value='#[output application/json --- { code: "CUSTOMER_NOT_FOUND", message: "Customer was not found.", correlationId: vars.effectiveCorrelationId }]'/>
+                                 value='#[output application/json --- { error: { code: 400, reason: "Bad Request", message: "Customer was not found." } }]'/>
+                </on-error-continue>
+                <on-error-continue type="APP:CUSTOMER_INACTIVE" logException="false">
+                    <set-variable variableName="httpStatus" value="#[400]"/>
+                    <set-payload mimeType="application/json"
+                                 value='#[output application/json --- { error: { code: 400, reason: "Bad Request", message: "Customer is inactive." } }]'/>
                 </on-error-continue>
                 <on-error-continue type="APP:CONTROLLED_INTERNAL_FAILURE" logException="false">
                     <set-variable variableName="httpStatus" value="#[500]"/>
                     <set-payload mimeType="application/json"
-                                 value='#[output application/json --- { code: "INTERNAL_ERROR", message: "An internal error occurred.", correlationId: vars.effectiveCorrelationId }]'/>
+                                 value='#[output application/json --- { error: { code: 500, reason: "Internal Server Error", message: "An internal error occurred." } }]'/>
+                </on-error-continue>
+                <on-error-continue type="ANY" logException="false">
+                    <set-variable variableName="httpStatus" value="#[500]"/>
+                    <set-payload mimeType="application/json"
+                                 value='#[output application/json --- { error: { code: 500, reason: "Internal Server Error", message: "An internal error occurred." } }]' />
                 </on-error-continue>
             </error-handler>
         </try>
@@ -90,6 +124,9 @@
             </when>
             <when expression="#[vars.customerId == 'CUST-500']">
                 <raise-error type="APP:CONTROLLED_INTERNAL_FAILURE" description="Controlled failure for fixture testing."/>
+            </when>
+            <when expression="#[vars.customerId == 'CUST-002']">
+                <raise-error type="APP:CUSTOMER_INACTIVE" description="Synthetic customer is inactive."/>
             </when>
             <when expression="#[vars.customerId == 'CUST-001']">
                 <ee:transform doc:name="Build synthetic customer summary">

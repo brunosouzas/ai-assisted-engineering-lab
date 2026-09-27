@@ -1,8 +1,8 @@
 #%RAML 1.0
-title: Customer Lookup API Fixture
+title: Customer Lookup API
 version: v1
 mediaType: application/json
-baseUri: http://localhost:8081/api
+baseUri: http://localhost:8081/api/customer-lookup
 
 types:
   CustomerSummary:
@@ -29,13 +29,18 @@ types:
     type: object
     additionalProperties: false
     properties:
-      code: string
-      message: string
-      correlationId: string
+      error:
+        type: object
+        additionalProperties: false
+        properties:
+          code: integer
+          reason: string
+          message: string
     example:
-      code: CUSTOMER_NOT_FOUND
-      message: Customer was not found.
-      correlationId: test-correlation-id
+      error:
+        code: 400
+        reason: Bad Request
+        message: The requested customer cannot be returned.
 
 /customers/{customerId}:
   uriParameters:
@@ -44,7 +49,7 @@ types:
       pattern: ^CUST-[0-9]{3}$
       example: CUST-001
   get:
-    description: Returns a deterministic synthetic customer summary.
+    description: Returns an active synthetic customer summary. Invalid, unknown, or inactive customers are business errors (400).
     responses:
       200:
         headers:
@@ -53,14 +58,31 @@ types:
           application/json:
             type: CustomerSummary
       400:
+        description: Invalid, unknown, or inactive customer.
         body:
           application/json:
             type: ErrorResponse
       404:
+        description: The requested API endpoint does not exist.
         body:
           application/json:
             type: ErrorResponse
       500:
+        body:
+          application/json:
+            type: ErrorResponse
+      405:
+        description: Method not allowed for the requested endpoint.
+        body:
+          application/json:
+            type: ErrorResponse
+      406:
+        description: No acceptable representation is available.
+        body:
+          application/json:
+            type: ErrorResponse
+      415:
+        description: Unsupported request media type.
         body:
           application/json:
             type: ErrorResponse

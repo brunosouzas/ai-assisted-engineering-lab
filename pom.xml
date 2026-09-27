@@ -5,12 +5,12 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>dev.brunosouzas.mulesoft.lab</groupId>
-    <artifactId>customer-lookup-api-fixture</artifactId>
+    <artifactId>ai-assisted-engineering-lab</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>mule-application</packaging>
 
-    <name>Customer Lookup API Fixture</name>
-    <description>Controlled MuleSoft fixture for repository discovery agent evaluations.</description>
+    <name>AI-Assisted Engineering Lab</name>
+    <description>Synthetic MuleSoft API scenarios for reproducible AI-assisted engineering articles.</description>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
