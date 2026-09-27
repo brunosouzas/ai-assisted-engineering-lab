@@ -1,0 +1,66 @@
+#%RAML 1.0
+title: Customer Lookup API Fixture
+version: v1
+mediaType: application/json
+baseUri: http://localhost:8081/api
+
+types:
+  CustomerSummary:
+    type: object
+    additionalProperties: false
+    properties:
+      customerId:
+        type: string
+        pattern: ^CUST-[0-9]{3}$
+      displayName: string
+      status:
+        enum: [ACTIVE, INACTIVE]
+      segment:
+        enum: [STANDARD, PREMIUM]
+      lastUpdated:
+        type: datetime
+    example:
+      customerId: CUST-001
+      displayName: Ada Lovelace
+      status: ACTIVE
+      segment: PREMIUM
+      lastUpdated: 2026-09-14T00:00:00Z
+  ErrorResponse:
+    type: object
+    additionalProperties: false
+    properties:
+      code: string
+      message: string
+      correlationId: string
+    example:
+      code: CUSTOMER_NOT_FOUND
+      message: Customer was not found.
+      correlationId: test-correlation-id
+
+/customers/{customerId}:
+  uriParameters:
+    customerId:
+      type: string
+      pattern: ^CUST-[0-9]{3}$
+      example: CUST-001
+  get:
+    description: Returns a deterministic synthetic customer summary.
+    responses:
+      200:
+        headers:
+          x-correlation-id: string
+        body:
+          application/json:
+            type: CustomerSummary
+      400:
+        body:
+          application/json:
+            type: ErrorResponse
+      404:
+        body:
+          application/json:
+            type: ErrorResponse
+      500:
+        body:
+          application/json:
+            type: ErrorResponse

@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <http:listener-config name="http-listener-config" doc:name="HTTP Listener">
+        <http:listener-connection host="0.0.0.0" port="${http.port}"/>
+    </http:listener-config>
+
+    <apikit:config name="customer-lookup-api-config"
+                   api="api/customer-lookup-api.raml"
+                   outboundHeadersMapName="outboundHeaders"
+                   httpStatusVarName="httpStatus"/>
+
+    <flow name="customer-lookup-api-main">
+        <http:listener config-ref="http-listener-config" path="/api/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit:router config-ref="customer-lookup-api-config"/>
+        <error-handler>
+            <on-error-continue type="APIKIT:BAD_REQUEST" logException="false">
+                <set-variable variableName="httpStatus" value="#[400]"/>
+                <set-payload mimeType="application/json"
+                             value='#[output application/json --- { code: "INVALID_CUSTOMER_ID", message: "Customer identifier format is invalid.", correlationId: correlationId }]'/>
+                <set-variable variableName="outboundHeaders" value="#[{'x-correlation-id': correlationId}]"/>
+            </on-error-continue>
+            <on-error-continue type="APIKIT:NOT_FOUND,APIKIT:METHOD_NOT_ALLOWED,APIKIT:NOT_ACCEPTABLE,APIKIT:UNSUPPORTED_MEDIA_TYPE" logException="false">
+                <set-variable variableName="httpStatus" value="#[error.errorType.identifier == 'NOT_FOUND' ? 404 : 400]"/>
+                <set-payload mimeType="application/json"
+                             value='#[output application/json --- { code: "REQUEST_NOT_SUPPORTED", message: "The request is not supported by this API.", correlationId: correlationId }]'/>
+                <set-variable variableName="outboundHeaders" value="#[{'x-correlation-id': correlationId}]"/>
+            </on-error-continue>
+        </error-handler>
+    </flow>
+
+    <flow name="get:\customers\(customerId):customer-lookup-api-config">
+        <set-payload value="#[attributes.uriParams.customerId]" mimeType="application/java"/>
+        <set-variable variableName="requestCorrelationId"
+                      value="#[attributes.headers.'x-correlation-id' default correlationId]"/>
+        <flow-ref name="customer-lookup-handler"/>
+    </flow>
+
+    <sub-flow name="customer-lookup-handler">
+        <set-variable variableName="customerId" value="#[payload as String]"/>
+        <set-variable variableName="effectiveCorrelationId"
+                      value="#[vars.requestCorrelationId default correlationId]"/>
+        <set-variable variableName="httpStatus" value="#[200]"/>
+        <try>
+            <flow-ref name="customer-lookup-process"/>
+            <error-handler>
+                <on-error-continue type="APP:INVALID_CUSTOMER_ID" logException="false">
+                    <set-variable variableName="httpStatus" value="#[400]"/>
+                    <set-payload mimeType="application/json"
+                                 value='#[output application/json --- { code: "INVALID_CUSTOMER_ID", message: "Customer identifier format is invalid.", correlationId: vars.effectiveCorrelationId }]'/>
+                </on-error-continue>
+                <on-error-continue type="APP:CUSTOMER_NOT_FOUND" logException="false">
+                    <set-variable variableName="httpStatus" value="#[404]"/>
+                    <set-payload mimeType="application/json"
+                                 value='#[output application/json --- { code: "CUSTOMER_NOT_FOUND", message: "Customer was not found.", correlationId: vars.effectiveCorrelationId }]'/>
+                </on-error-continue>
+                <on-error-continue type="APP:CONTROLLED_INTERNAL_FAILURE" logException="false">
+                    <set-variable variableName="httpStatus" value="#[500]"/>
+                    <set-payload mimeType="application/json"
+                                 value='#[output application/json --- { code: "INTERNAL_ERROR", message: "An internal error occurred.", correlationId: vars.effectiveCorrelationId }]'/>
+                </on-error-continue>
+            </error-handler>
+        </try>
+        <set-variable variableName="outboundHeaders"
+                      value="#[{'x-correlation-id': vars.effectiveCorrelationId}]"/>
+    </sub-flow>
+
+    <sub-flow name="customer-lookup-process">
+        <choice>
+            <when expression="#[not ((vars.customerId as String) matches /CUST-[0-9]{3}/)]">
+                <raise-error type="APP:INVALID_CUSTOMER_ID" description="Invalid synthetic customer identifier."/>
+            </when>
+            <when expression="#[vars.customerId == 'CUST-500']">
+                <raise-error type="APP:CONTROLLED_INTERNAL_FAILURE" description="Controlled failure for fixture testing."/>
+            </when>
+            <when expression="#[vars.customerId == 'CUST-001']">
+                <ee:transform doc:name="Build synthetic customer summary">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    customerId: vars.customerId,
+    displayName: "Ada Lovelace",
+    status: "ACTIVE",
+    segment: "PREMIUM",
+    lastUpdated: "2026-09-14T00:00:00Z"
+}]]></ee:set-payload>
+                    </ee:message>
+                </ee:transform>
+            </when>
+            <otherwise>
+                <raise-error type="APP:CUSTOMER_NOT_FOUND" description="Synthetic customer was not found."/>
+            </otherwise>
+        </choice>
+    </sub-flow>
+</mule>
