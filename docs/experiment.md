@@ -26,7 +26,7 @@ The initial commit contains the existing synthetic customer lookup fixture. It i
 | AI runtime and date | Codex CLI, `gpt-6-sol`, 2026-09-27, read-only |
 | Proposal artifact or commit | `docs/codex-proposal-2026-09-27.md`; no code applied |
 | Engineer's contract decision | Bruno: `404` only for a missing endpoint; business errors, including unknown or inactive customers, use `400`; system failures use `500`; apply the standard error body even in examples |
-| Changed files and final commit | Pending |
+| Changed files and implementation commit | RAML, Mule flow, MUnit, POM and README in `394490d1df171e75f7a0851e3c5c09cc1b3f6f64` |
 | Validation command and result | Java 17 + Maven 3.9.8, offline `clean package`: seven tests, zero failures/errors/skips, `BUILD SUCCESS`; details below |
 | Remaining limits | Handler-only MUnit; HTTP/APIKit status mapping was not exercised end to end |
 

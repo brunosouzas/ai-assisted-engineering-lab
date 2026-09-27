@@ -2,7 +2,7 @@
 
 A reusable, synthetic Mule 4 application for reproducible AI-assisted engineering articles. Each exercise has its own API contract, route prefix, Mule file, flow prefix and MUnit suite. The Maven artifact identifies the shared lab rather than the first exercise.
 
-The baseline was copied from the `customer-lookup-api-fixture` in [`mulesoft-agent-test-lab`](https://github.com/brunosouzas/mulesoft-agent-test-lab). Its MIT licence is retained. No customer, company or production data is included.
+The initial synthetic customer lookup fixture was adapted from an earlier private lab by the same author. Its MIT licence is retained. No customer, company or production data is included.
 
 ## Customer lookup exercise
 
