@@ -22,12 +22,24 @@ The initial commit contains the existing synthetic customer lookup fixture. It i
 | Item | Actual observation |
 |---|---|
 | Baseline commit | `82eb3332c889d31e75351df58c69948d4d50fcc1` |
-| Requirement sent to AI | Pending |
-| AI runtime and date | Pending |
-| Proposal artifact or commit | Pending |
+| Requirement sent to AI | See verbatim prompt below |
+| AI runtime and date | Codex, GPT-6, 2026-09-27 |
+| Proposal artifact or commit | This document, section "First AI proposal"; no code applied |
 | Engineer's contract decision | Pending |
 | Changed files and final commit | Pending |
 | Validation command and result | Pending |
 | Remaining limits | Pending |
 
 Do not use an invented error or a fabricated AI response to make the story more dramatic. If the AI proposes the chosen contract immediately, document that outcome and show how it was checked.
+
+## First AI proposal (preserved before the engineer decision)
+
+Prompt supplied to Codex on 27 September 2026:
+
+> Add a second synthetic customer, `CUST-002`, whose status is `INACTIVE`, to the existing Mule customer lookup API. Propose the contract and implementation change. Do not edit the repository yet.
+
+Codex proposal:
+
+> The current RAML already allows `INACTIVE` in `CustomerSummary.status`, so the smallest contract-compatible change is to return `200` with the existing response shape for `CUST-002`. Add a branch to `customer-lookup-process` that builds a deterministic synthetic summary, plus a MUnit test asserting `200`, the identifier and `INACTIVE` status. Keep the existing `404` for unknown identifiers. This proposal assumes inactive records are visible to callers. If inactivity should hide a record, the contract needs an explicit rule and a test for that policy; the model cannot infer it from the status enum.
+
+The proposal is an AI output, not an approved contract decision. The next step is to record the engineer's choice before editing code.
