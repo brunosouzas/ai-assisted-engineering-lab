@@ -22,9 +22,9 @@ The initial commit contains the existing synthetic customer lookup fixture. It i
 | Item | Actual observation |
 |---|---|
 | Baseline commit | `82eb3332c889d31e75351df58c69948d4d50fcc1` |
-| Requirement sent to AI | Not yet run as a controlled prompt |
-| AI runtime and date | Codex, GPT-6, 2026-09-27 (preliminary draft) |
-| Proposal artifact or commit | Preliminary draft below; controlled run pending |
+| Requirement sent to AI | Exact prompt in `docs/codex-proposal-2026-09-27.md` run metadata below |
+| AI runtime and date | Codex CLI, `gpt-6-sol`, 2026-09-27, read-only |
+| Proposal artifact or commit | `docs/codex-proposal-2026-09-27.md`; no code applied |
 | Engineer's contract decision | Pending |
 | Changed files and final commit | Pending |
 | Validation command and result | Pending |
@@ -42,4 +42,4 @@ Codex preliminary proposal in this documentation session:
 
 > The current RAML already allows `INACTIVE` in `CustomerSummary.status`, so the smallest contract-compatible change is to return `200` with the existing response shape for `CUST-002`. Add a branch to `customer-lookup-process` that builds a deterministic synthetic summary, plus a MUnit test asserting `200`, the identifier and `INACTIVE` status. Keep the existing `404` for unknown identifiers. This proposal assumes inactive records are visible to callers. If inactivity should hide a record, the contract needs an explicit rule and a test for that policy; the model cannot infer it from the status enum.
 
-This proposal is not the output of a separately executed controlled prompt and is not an approved contract decision. The next step is to run the recorded prompt, preserve its full response, then record the engineer's choice before editing code.
+The separate controlled run is now preserved in `docs/codex-proposal-2026-09-27.md`. It independently proposed `200` and identified inactive-customer visibility as an assumption. The next step is to record the engineer's choice before editing code.
