@@ -1,4 +1,4 @@
-# AI Engineer Contract Lab
+# AI-Assisted Engineering Lab
 
 A small, synthetic Mule 4 application for a reproducible exercise about AI-assisted software engineering. The repository separates an already working baseline from a later AI-assisted contract change, so observations can be checked against code and test results.
 

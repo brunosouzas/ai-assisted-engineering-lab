@@ -6,6 +6,8 @@ Runtime: Codex CLI `gpt-6-sol`, read-only sandbox. No files were edited and no t
 
 > Add a second synthetic customer, CUST-002, whose status is INACTIVE, to the existing Mule customer lookup API. Propose the contract and implementation change. Do not edit the repository yet. Explain any assumptions and which tests should verify the behaviour.
 
+The response below is preserved verbatim. Its absolute file links contain the original local directory name, `ai-engineer-contract-lab`; the repository was renamed to `ai-assisted-engineering-lab` after the run.
+
 ## Full final response
 
 **Proposed contract:** `GET /api/customers/CUST-002` returns `200` with the existing `CustomerSummary` shape and `status: INACTIVE`. The RAML already permits `INACTIVE`, so this needs no new field or response code. Add a synthetic `CUST-002` example or clarify the operation description in [customer-lookup-api.raml](/Users/brunosouzas/repository-local/com/github/brunosouzas/ai-engineer-contract-lab/src/main/resources/api/customer-lookup-api.raml). This is an additive change to the documented behaviour.
