@@ -27,7 +27,7 @@ The initial commit contains the existing synthetic customer lookup fixture. It i
 | Proposal artifact or commit | `docs/codex-proposal-2026-09-27.md`; no code applied |
 | Engineer's contract decision | Bruno: `404` only for a missing endpoint; business errors, including unknown or inactive customers, use `400`; system failures use `500`; apply the standard error body even in examples |
 | Changed files and implementation commit | RAML, Mule flow, MUnit, POM and README in `394490d1df171e75f7a0851e3c5c09cc1b3f6f64` |
-| Validation command and result | Java 17 + Maven 3.9.8, offline `clean package`: seven tests, zero failures/errors/skips, `BUILD SUCCESS`; details below |
+| Validation command and result | Java 17 + Maven 3.9.8, offline `clean package`: six parameterized cases, zero failures/errors/skips, `BUILD SUCCESS`; details below |
 | Remaining limits | Handler-only MUnit; HTTP/APIKit status mapping was not exercised end to end |
 
 Do not use an invented error or a fabricated AI response to make the story more dramatic. If the AI proposes the chosen contract immediately, document that outcome and show how it was checked.
@@ -63,3 +63,9 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home /Users/brun
 Observed result: `BUILD SUCCESS`, seven MUnit tests, zero failures, zero errors, zero skipped, and 42.86% application coverage. The tests verify the handler's success, business errors, sanitised system error, and correlation ID behaviour. They do not invoke the HTTP listener or APIKit router, so the configured `404`, `405`, `406` and `415` responses still need a separate end-to-end check. A local attempt with `mvn -o mule:run` did not start the application because Mule Maven Plugin 4.9.1 has no `run` goal; that command failure is an environment/tooling limit, not a failing application test.
 
 The contract change from business `404` to `400` is incompatible for consumers that interpret the old status. This is an isolated, unpublished laboratory application; no production consumer was found or changed.
+
+## Parameterized test follow-up
+
+After the first publication, Bruno identified that the MUnit suite did not follow the project's parameterized-test convention. The seven fixed tests were replaced by two suites using external YAML case data: `customer-lookup-success-parameterized-suite.xml` runs two success/correlation variants; `customer-lookup-error-parameterized-suite.xml` runs four business/system error variants. The cases live in `src/test/resources/munit/`. These six runs preserve the behaviour checks from the seven fixed tests while combining the success and correlation checks.
+
+On 27 September 2026, `mvn -o clean package` with Java 17 completed with `BUILD SUCCESS`, six parameterization names in the MUnit result, zero failures, zero errors, zero skips and 42.86% application coverage. HTTP/APIKit routing remains outside this suite.

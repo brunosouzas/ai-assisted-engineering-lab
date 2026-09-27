@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+    <munit:config name="customer-lookup-error-parameterized-suite">
+        <munit:parameterizations file="munit/customer-lookup-error-cases.yaml"/>
+    </munit:config>
+
+    <munit:test name="customer-lookup-error-contract">
+        <munit:behavior>
+            <munit:set-event>
+                <munit:payload value="#[p('customerId')]"/>
+                <munit:variables>
+                    <munit:variable key="requestCorrelationId" value="#[p('correlationId')]"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="customer-lookup-handler"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]"
+                                     is="#[MunitTools::equalTo(p('expectedStatus') as Number)]"/>
+            <munit-tools:assert-that expression="#[payload.error.code]"
+                                     is="#[MunitTools::equalTo(p('expectedStatus') as Number)]"/>
+            <munit-tools:assert-that expression="#[payload.error.reason]"
+                                     is="#[MunitTools::equalTo(p('expectedReason'))]"/>
+            <munit-tools:assert-that expression="#[payload.error.message]"
+                                     is="#[MunitTools::equalTo(p('expectedMessage'))]"/>
+            <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is="#[MunitTools::equalTo(3)]"/>
+            <munit-tools:assert-that expression="#[vars.outboundHeaders.'x-correlation-id']"
+                                     is="#[MunitTools::equalTo(p('correlationId'))]"/>
+        </munit:validation>
+    </munit:test>
+</mule>

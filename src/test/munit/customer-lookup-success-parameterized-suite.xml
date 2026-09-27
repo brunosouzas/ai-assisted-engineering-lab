@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+    <munit:config name="customer-lookup-success-parameterized-suite">
+        <munit:parameterizations file="munit/customer-lookup-success-cases.yaml"/>
+    </munit:config>
+
+    <munit:test name="active-customer-response-and-correlation-id">
+        <munit:behavior>
+            <munit:set-event>
+                <munit:payload value="#[p('customerId')]"/>
+                <munit:variables>
+                    <munit:variable key="requestCorrelationId"
+                                    value="#[if (p('inputCorrelationId') == 'GENERATE') null else p('inputCorrelationId')]"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="customer-lookup-handler"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(200)]"/>
+            <munit-tools:assert-that expression="#[payload.customerId]" is="#[MunitTools::equalTo(p('customerId'))]"/>
+            <munit-tools:assert-that expression="#[payload.displayName]" is="#[MunitTools::equalTo(p('expectedName'))]"/>
+            <munit-tools:assert-that expression="#[payload.status]" is="#[MunitTools::equalTo('ACTIVE')]"/>
+            <munit-tools:assert-that expression="#[if (p('inputCorrelationId') == 'GENERATE') sizeOf(vars.effectiveCorrelationId as String) > 0 else vars.effectiveCorrelationId == p('inputCorrelationId')]"
+                                     is="#[MunitTools::equalTo(true)]"/>
+            <munit-tools:assert-that expression="#[vars.outboundHeaders.'x-correlation-id']"
+                                     is="#[MunitTools::equalTo(vars.effectiveCorrelationId)]"/>
+        </munit:validation>
+    </munit:test>
+</mule>

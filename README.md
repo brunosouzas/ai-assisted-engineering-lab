@@ -12,7 +12,7 @@ The engineer's decision supersedes the original AI proposal, which suggested `20
 
 ## Naming for future exercises
 
-Keep the repository and Maven artifact named `ai-assisted-engineering-lab`. Give each exercise a descriptive slug: for example, `customer-lookup-api.raml`, `customer-lookup-api.xml`, `customer-lookup-*` flows and `customer-lookup-api-suite.xml`. Reserve `/api/<exercise-slug>/*` for its HTTP routes. Add another scenario with its own files and prefix instead of extending a generic `main` or `process` flow with unrelated behaviour.
+Keep the repository and Maven artifact named `ai-assisted-engineering-lab`. Give each exercise a descriptive slug: for example, `customer-lookup-api.raml`, `customer-lookup-api.xml`, `customer-lookup-*` flows and `customer-lookup-*-parameterized-suite.xml` MUnit suites. Reserve `/api/<exercise-slug>/*` for its HTTP routes. Add another scenario with its own files and prefix instead of extending a generic `main` or `process` flow with unrelated behaviour.
 
 ## Build and test
 
@@ -24,7 +24,7 @@ JAVA_HOME=/path/to/jdk-17 mvn -o clean package
 
 Remove `-o` when the dependencies have not been cached. MUnit starts a local Mule runtime and needs access to dynamic localhost ports. The application has no external service, credential or deployment target.
 
-The copied baseline passed six MUnit tests with 60.00% application coverage on 27 September 2026. The updated contract is validated separately in the experiment record. These are observed results, not coverage thresholds. The current tests exercise the handler directly; listener and APIKit routing are not directly covered.
+The copied baseline passed six MUnit tests with 60.00% application coverage on 27 September 2026. The contract update first passed seven fixed-case tests; the current parameterized suites run six YAML cases (two success/correlation cases and four error cases) with 42.86% application coverage. These are observed results, not coverage thresholds. The suites exercise the handler directly; listener and APIKit routing are not directly covered. See [the MUnit parameterization documentation](https://docs.mulesoft.com/munit/latest/parameterized) for the YAML format.
 
 ## Experiment record
 

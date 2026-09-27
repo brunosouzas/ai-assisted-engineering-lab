@@ -1,0 +1,9 @@
+provided-correlation-id:
+  customerId: "CUST-001"
+  expectedName: "Ada Lovelace"
+  inputCorrelationId: "client-correlation-id"
+
+generated-correlation-id:
+  customerId: "CUST-001"
+  expectedName: "Ada Lovelace"
+  inputCorrelationId: "GENERATE"

@@ -1,0 +1,27 @@
+invalid-customer-id:
+  customerId: "invalid"
+  correlationId: "corr-invalid"
+  expectedStatus: "400"
+  expectedReason: "Bad Request"
+  expectedMessage: "Customer identifier format is invalid."
+
+unknown-customer:
+  customerId: "CUST-999"
+  correlationId: "corr-unknown"
+  expectedStatus: "400"
+  expectedReason: "Bad Request"
+  expectedMessage: "Customer was not found."
+
+inactive-customer:
+  customerId: "CUST-002"
+  correlationId: "corr-inactive"
+  expectedStatus: "400"
+  expectedReason: "Bad Request"
+  expectedMessage: "Customer is inactive."
+
+controlled-system-failure:
+  customerId: "CUST-500"
+  correlationId: "corr-failure"
+  expectedStatus: "500"
+  expectedReason: "Internal Server Error"
+  expectedMessage: "An internal error occurred."
