@@ -21,7 +21,7 @@ The initial commit contains the existing synthetic customer lookup fixture. It i
 
 | Item | Actual observation |
 |---|---|
-| Baseline commit | Pending |
+| Baseline commit | `82eb3332c889d31e75351df58c69948d4d50fcc1` |
 | Requirement sent to AI | Pending |
 | AI runtime and date | Pending |
 | Proposal artifact or commit | Pending |
