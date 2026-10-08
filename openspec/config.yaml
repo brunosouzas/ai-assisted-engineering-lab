@@ -1,0 +1,21 @@
+# From ai-engineering-kit templates/openspec/config.yaml (schema spec-driven).
+schema: spec-driven
+
+context: |
+  Size every artifact to the request. A small change gets a short proposal,
+  a design.md of a few lines and few tasks. Plan only what the request asks for.
+
+rules:
+  proposal:
+    - State what is out of scope.
+    - Do not add capabilities, options or requirements the request does not ask for.
+    - When the request is unclear, list the open question instead of choosing an answer.
+  specs:
+    - Specify only behaviour this change adds or modifies.
+    - No requirement for hypothetical future needs, extension points or configurability nobody asked for.
+  design:
+    - Without a technical decision between real alternatives, keep design.md to a few lines that say so (tasks stay blocked until the file exists).
+    - Prefer the existing structure, dependencies and conventions of the repository; justify anything new.
+  tasks:
+    - Every task traces back to the proposal; no extra refactors, abstractions or cleanups.
+    - Each task states how it is verified, with the project's existing tests and checks.
