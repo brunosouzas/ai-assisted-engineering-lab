@@ -10,7 +10,7 @@ Stack: Mule 4, APIkit, MUnit, Maven, GitHub Actions
 Delivery: E reference
 Integration branch: `main`
 Data: none
-Article: `50-writing/validate-ai-api-contract-change/` (also cited by `50-writing/where-the-work-moves/`)
+Article: `brunosouzas-content: writing/validate-ai-api-contract-change/` (also cited by `brunosouzas-content: writing/where-the-work-moves/`)
 
 - Build: `mvn -B clean package -DskipMunitTests` (what CI runs on every pull request, `.github/workflows/ci.yml`; no credentials needed)
 - Test: `mvn clean package` (MUnit; needs the MuleSoft Enterprise repository credentials in ~/.m2/settings.xml, so it runs locally before each pull request, not in CI)
