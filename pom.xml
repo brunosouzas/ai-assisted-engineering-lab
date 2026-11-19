@@ -45,6 +45,10 @@
                     </execution>
                 </executions>
                 <configuration>
+                    <!-- A free port for the listener, so a test that calls the app through HTTP never clashes with another app. -->
+                    <dynamicPorts>
+                        <dynamicPort>http.port</dynamicPort>
+                    </dynamicPorts>
                     <coverage>
                         <runCoverage>true</runCoverage>
                         <formats>

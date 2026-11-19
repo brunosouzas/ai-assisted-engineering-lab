@@ -1,0 +1,1064 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+  <!-- The order status exercise. Every test sends a real HTTP request to the app's listener (MUNIT-5), so the router and
+       the spec are part of what is tested. The Order Store is synthetic and never reachable: each call to it is mocked
+       by its doc:name (MUNIT-6). The test names start with the requirement IDs of docs/order-status/requirements.md as
+       numbered in README.md ("Order status exercise"). http.port is a free port picked by the munit-maven-plugin. -->
+  <munit:config name="order-status-suite"/>
+
+  <http:request-config name="order-status-test-client-config">
+    <http:request-connection host="localhost" port="${http.port}"/>
+  </http:request-config>
+
+  <!-- R1, R4, R5, R7, R9, R10, R11, R14: the order and its product names are read and mapped. -->
+  <munit:test name="r1-r4-r5-r7-r9-r10-r11-r14-returns-order-status-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 2, unitPrice: 12.5 }, { productId: "PRD-20", quantity: 1, unitPrice: 7.25 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-10'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-20'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-20", name: "Synthetic Gadget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r1-r4-r5-r7-'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(200)]'/>
+      <munit-tools:assert-that expression="#[payload.orderId]" is='#[MunitTools::equalTo("ORD-001")]'/>
+      <munit-tools:assert-that expression="#[payload.customerId]" is='#[MunitTools::equalTo("CUST-001")]'/>
+      <munit-tools:assert-that expression="#[payload.status]" is='#[MunitTools::equalTo("SHIPPED")]'/>
+      <munit-tools:assert-that expression="#[payload.placedAt]" is='#[MunitTools::equalTo("2026-10-02T14:05:00Z")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.lines)]" is='#[MunitTools::equalTo(2)]'/>
+      <munit-tools:assert-that expression="#[payload.lines[0].productId]" is='#[MunitTools::equalTo("PRD-10")]'/>
+      <munit-tools:assert-that expression="#[payload.lines[0].productName]" is='#[MunitTools::equalTo("Synthetic Widget")]'/>
+      <munit-tools:assert-that expression="#[payload.lines[0].quantity]" is='#[MunitTools::equalTo(2)]'/>
+      <munit-tools:assert-that expression="#[payload.lines[0].lineTotal]" is='#[MunitTools::equalTo(25)]'/>
+      <munit-tools:assert-that expression="#[payload.lines[1].productName]" is='#[MunitTools::equalTo("Synthetic Gadget")]'/>
+      <munit-tools:assert-that expression="#[payload.lines[1].lineTotal]" is='#[MunitTools::equalTo(7.25)]'/>
+      <munit-tools:assert-that expression="#[payload.orderTotal.amount]" is='#[MunitTools::equalTo(32.25)]'/>
+      <munit-tools:assert-that expression="#[payload.orderTotal.currency]" is='#[MunitTools::equalTo("EUR")]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-r1-r4-r5-r7-")]'/>
+      <munit-tools:verify-call processor="http:request" times="1">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+      <munit-tools:verify-call processor="http:request" times="2">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R8: statusCode 1 is RECEIVED. -->
+  <munit:test name="r8-status-code-1-is-received-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 1, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 1, unitPrice: 1.0 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-10'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r8-status-co'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(200)]'/>
+      <munit-tools:assert-that expression="#[payload.status]" is='#[MunitTools::equalTo("RECEIVED")]'/>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R8: statusCode 2 is PAID. -->
+  <munit:test name="r8-status-code-2-is-paid-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 2, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 1, unitPrice: 1.0 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-10'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r8-status-co'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(200)]'/>
+      <munit-tools:assert-that expression="#[payload.status]" is='#[MunitTools::equalTo("PAID")]'/>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R8: statusCode 4 is DELIVERED. -->
+  <munit:test name="r8-status-code-4-is-delivered-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 4, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 1, unitPrice: 1.0 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-10'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r8-status-co'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(200)]'/>
+      <munit-tools:assert-that expression="#[payload.status]" is='#[MunitTools::equalTo("DELIVERED")]'/>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R8: statusCode 5 is CANCELLED. -->
+  <munit:test name="r8-status-code-5-is-cancelled-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 5, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 1, unitPrice: 1.0 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-10'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r8-status-co'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(200)]'/>
+      <munit-tools:assert-that expression="#[payload.status]" is='#[MunitTools::equalTo("CANCELLED")]'/>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R8, R19: an unknown statusCode is an Order Store defect. -->
+  <munit:test name="r8-r19-unknown-status-code-is-502-and-reads-no-product-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 9, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 2, unitPrice: 12.5 }, { productId: "PRD-20", quantity: 1, unitPrice: 7.25 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r8-r19-unkno'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(502)]'/>
+      <munit-tools:assert-that expression="#[payload.error.code]" is='#[MunitTools::equalTo(502)]'/>
+      <munit-tools:assert-that expression="#[payload.error.reason]" is='#[MunitTools::equalTo("Bad Gateway")]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The Order Store failed or returned an unexpected answer.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-r8-r19-unkno")]'/>
+      <munit-tools:verify-call processor="http:request" times="0">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R12: a product the Order Store does not know keeps its line, with productName null. -->
+  <munit:test name="r12-unknown-product-keeps-the-line-with-null-name-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 2, unitPrice: 12.5 }, { productId: "PRD-20", quantity: 1, unitPrice: 7.25 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-10'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-20'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:error typeId="HTTP:NOT_FOUND"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r12-unknown-'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(200)]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.lines)]" is='#[MunitTools::equalTo(2)]'/>
+      <munit-tools:assert-that expression="#[payload.lines[0].productName]" is='#[MunitTools::equalTo("Synthetic Widget")]'/>
+      <munit-tools:assert-that expression="#[payload.lines[1].productId]" is='#[MunitTools::equalTo("PRD-20")]'/>
+      <munit-tools:assert-that expression="#[payload.lines[1].productName]" is='#[MunitTools::nullValue()]'/>
+      <munit-tools:assert-that expression="#[(keysOf(payload.lines[1]) map ($ as String)) contains 'productName']" is='#[MunitTools::equalTo(true)]'/>
+      <munit-tools:assert-that expression="#[payload.lines[1].lineTotal]" is='#[MunitTools::equalTo(7.25)]'/>
+      <munit-tools:assert-that expression="#[payload.orderTotal.amount]" is='#[MunitTools::equalTo(32.25)]'/>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R9, R10, R11: UTC kept, two-decimal half-up rounding, one product read per distinct id. -->
+  <munit:test name="r9-r10-r11-rounds-half-up-converts-to-utc-reads-each-product-once-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, placedAtUtc: "2026-10-02T16:05:00+02:00", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 3, unitPrice: 0.335 }, { productId: "PRD-10", quantity: 1, unitPrice: 2.10 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-10'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r9-r10-r11-r'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(200)]'/>
+      <munit-tools:assert-that expression="#[payload.placedAt]" is='#[MunitTools::equalTo("2026-10-02T14:05:00Z")]'/>
+      <munit-tools:assert-that expression="#[payload.lines[0].lineTotal]" is='#[MunitTools::equalTo(1.01)]'/>
+      <munit-tools:assert-that expression="#[payload.lines[1].lineTotal]" is='#[MunitTools::equalTo(2.1)]'/>
+      <munit-tools:assert-that expression="#[payload.orderTotal.amount]" is='#[MunitTools::equalTo(3.11)]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.lines)]" is='#[MunitTools::equalTo(2)]'/>
+      <munit-tools:verify-call processor="http:request" times="1">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R10, R11: an order with no lines. -->
+  <munit:test name="r10-r11-order-without-lines-has-empty-lines-and-zero-total-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r10-r11-orde'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(200)]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.lines)]" is='#[MunitTools::equalTo(0)]'/>
+      <munit-tools:assert-that expression="#[payload.orderTotal.amount]" is='#[MunitTools::equalTo(0)]'/>
+      <munit-tools:assert-that expression="#[payload.orderTotal.currency]" is='#[MunitTools::equalTo("EUR")]'/>
+      <munit-tools:verify-call processor="http:request" times="0">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R6: 20 lines is the Order Store's limit and is served. -->
+  <munit:test name="r6-order-with-20-lines-is-accepted-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-00", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-01", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-02", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-03", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-04", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-05", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-06", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-07", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-08", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-09", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-10", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-11", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-12", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-13", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-14", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-15", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-16", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-17", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-18", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-19", quantity: 1, unitPrice: 1.0 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-00'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-00", name: "Product 0" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-01'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-01", name: "Product 1" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-02'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-02", name: "Product 2" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-03'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-03", name: "Product 3" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-04'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-04", name: "Product 4" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-05'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-05", name: "Product 5" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-06'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-06", name: "Product 6" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-07'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-07", name: "Product 7" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-08'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-08", name: "Product 8" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-09'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-09", name: "Product 9" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-10'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Product 10" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-11'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-11", name: "Product 11" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-12'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-12", name: "Product 12" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-13'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-13", name: "Product 13" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-14'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-14", name: "Product 14" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-15'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-15", name: "Product 15" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-16'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-16", name: "Product 16" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-17'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-17", name: "Product 17" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-18'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-18", name: "Product 18" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-19'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-19", name: "Product 19" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r6-order-wit'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(200)]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.lines)]" is='#[MunitTools::equalTo(20)]'/>
+      <munit-tools:assert-that expression="#[payload.orderTotal.amount]" is='#[MunitTools::equalTo(20)]'/>
+      <munit-tools:verify-call processor="http:request" times="20">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R6, R19: more than 20 lines breaks the Order Store's own rule. -->
+  <munit:test name="r6-r19-order-with-21-lines-is-502-and-reads-no-product-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-00", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-01", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-02", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-03", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-04", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-05", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-06", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-07", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-08", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-09", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-10", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-11", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-12", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-13", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-14", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-15", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-16", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-17", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-18", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-19", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-20", quantity: 1, unitPrice: 1.0 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r6-r19-order'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(502)]'/>
+      <munit-tools:assert-that expression="#[payload.error.code]" is='#[MunitTools::equalTo(502)]'/>
+      <munit-tools:assert-that expression="#[payload.error.reason]" is='#[MunitTools::equalTo("Bad Gateway")]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The Order Store failed or returned an unexpected answer.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-r6-r19-order")]'/>
+      <munit-tools:verify-call processor="http:request" times="0">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R2, R15: the router rejects an orderId that is not ORD- and three digits. -->
+  <munit:test name="r2-r15-invalid-order-id-is-400-and-calls-no-backend-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-1" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r2-r15-inval'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(400)]'/>
+      <munit-tools:assert-that expression="#[payload.error.code]" is='#[MunitTools::equalTo(400)]'/>
+      <munit-tools:assert-that expression="#[payload.error.reason]" is='#[MunitTools::equalTo("Bad Request")]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The request is invalid.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-r2-r15-inval")]'/>
+      <munit-tools:verify-call processor="http:request" times="0">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R2, R15. -->
+  <munit:test name="r2-r15-lowercase-order-id-is-400-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ord-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r2-r15-lower'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(400)]'/>
+      <munit-tools:assert-that expression="#[payload.error.code]" is='#[MunitTools::equalTo(400)]'/>
+      <munit-tools:assert-that expression="#[payload.error.reason]" is='#[MunitTools::equalTo("Bad Request")]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The request is invalid.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:verify-call processor="http:request" times="0">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R1, R13, R14: the router answers an unknown route in the shared body. -->
+  <munit:test name="r1-unknown-endpoint-is-404-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/unknown" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r1-unknown-e'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(404)]'/>
+      <munit-tools:assert-that expression="#[payload.error.code]" is='#[MunitTools::equalTo(404)]'/>
+      <munit-tools:assert-that expression="#[payload.error.reason]" is='#[MunitTools::equalTo("Not Found")]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The requested API endpoint does not exist.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-r1-unknown-e")]'/>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R16, R13, R14: the Order Store's HTTP:NOT_FOUND on the order call. -->
+  <munit:test name="r16-store-404-is-404-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:error typeId="HTTP:NOT_FOUND"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r16-store-40'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(404)]'/>
+      <munit-tools:assert-that expression="#[payload.error.code]" is='#[MunitTools::equalTo(404)]'/>
+      <munit-tools:assert-that expression="#[payload.error.reason]" is='#[MunitTools::equalTo("Not Found")]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The order was not found.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-r16-store-40")]'/>
+      <munit-tools:verify-call processor="http:request" times="0">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R17, R13, R14: the Order Store's HTTP:TIMEOUT on the order call. -->
+  <munit:test name="r17-store-timeout-is-504-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:error typeId="HTTP:TIMEOUT"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r17-store-ti'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(504)]'/>
+      <munit-tools:assert-that expression="#[payload.error.code]" is='#[MunitTools::equalTo(504)]'/>
+      <munit-tools:assert-that expression="#[payload.error.reason]" is='#[MunitTools::equalTo("Gateway Timeout")]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The Order Store did not answer in time.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-r17-store-ti")]'/>
+      <munit-tools:verify-call processor="http:request" times="0">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R18, R13, R14: the Order Store's HTTP:CONNECTIVITY on the order call. -->
+  <munit:test name="r18-store-unreachable-is-503-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:error typeId="HTTP:CONNECTIVITY"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r18-store-un'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(503)]'/>
+      <munit-tools:assert-that expression="#[payload.error.code]" is='#[MunitTools::equalTo(503)]'/>
+      <munit-tools:assert-that expression="#[payload.error.reason]" is='#[MunitTools::equalTo("Service Unavailable")]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The Order Store cannot be reached.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-r18-store-un")]'/>
+      <munit-tools:verify-call processor="http:request" times="0">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R19, R13, R14: the Order Store's HTTP:INTERNAL_SERVER_ERROR on the order call. -->
+  <munit:test name="r19-store-500-is-502-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:error typeId="HTTP:INTERNAL_SERVER_ERROR"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r19-store-50'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(502)]'/>
+      <munit-tools:assert-that expression="#[payload.error.code]" is='#[MunitTools::equalTo(502)]'/>
+      <munit-tools:assert-that expression="#[payload.error.reason]" is='#[MunitTools::equalTo("Bad Gateway")]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The Order Store failed or returned an unexpected answer.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-r19-store-50")]'/>
+      <munit-tools:verify-call processor="http:request" times="0">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R19, R13, R14: the Order Store's HTTP:SERVICE_UNAVAILABLE on the order call. -->
+  <munit:test name="r19-store-503-answer-is-502-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:error typeId="HTTP:SERVICE_UNAVAILABLE"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r19-store-50'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(502)]'/>
+      <munit-tools:assert-that expression="#[payload.error.code]" is='#[MunitTools::equalTo(502)]'/>
+      <munit-tools:assert-that expression="#[payload.error.reason]" is='#[MunitTools::equalTo("Bad Gateway")]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The Order Store failed or returned an unexpected answer.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-r19-store-50")]'/>
+      <munit-tools:verify-call processor="http:request" times="0">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R17, R13, R14: the Order Store's HTTP:TIMEOUT on a product call. -->
+  <munit:test name="r17-product-timeout-is-504-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 2, unitPrice: 12.5 }, { productId: "PRD-20", quantity: 1, unitPrice: 7.25 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-10'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-20'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:error typeId="HTTP:TIMEOUT"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r17-product-'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(504)]'/>
+      <munit-tools:assert-that expression="#[payload.error.code]" is='#[MunitTools::equalTo(504)]'/>
+      <munit-tools:assert-that expression="#[payload.error.reason]" is='#[MunitTools::equalTo("Gateway Timeout")]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The Order Store did not answer in time.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-r17-product-")]'/>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R18, R13, R14: the Order Store's HTTP:CONNECTIVITY on a product call. -->
+  <munit:test name="r18-product-unreachable-is-503-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 2, unitPrice: 12.5 }, { productId: "PRD-20", quantity: 1, unitPrice: 7.25 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-10'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-20'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:error typeId="HTTP:CONNECTIVITY"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r18-product-'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(503)]'/>
+      <munit-tools:assert-that expression="#[payload.error.code]" is='#[MunitTools::equalTo(503)]'/>
+      <munit-tools:assert-that expression="#[payload.error.reason]" is='#[MunitTools::equalTo("Service Unavailable")]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The Order Store cannot be reached.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-r18-product-")]'/>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R19, R13, R14: the Order Store's HTTP:INTERNAL_SERVER_ERROR on a product call. -->
+  <munit:test name="r19-product-500-is-502-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 2, unitPrice: 12.5 }, { productId: "PRD-20", quantity: 1, unitPrice: 7.25 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-10'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-20'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:error typeId="HTTP:INTERNAL_SERVER_ERROR"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-r19-product-'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(502)]'/>
+      <munit-tools:assert-that expression="#[payload.error.code]" is='#[MunitTools::equalTo(502)]'/>
+      <munit-tools:assert-that expression="#[payload.error.reason]" is='#[MunitTools::equalTo("Bad Gateway")]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The Order Store failed or returned an unexpected answer.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-r19-product-")]'/>
+    </munit:validation>
+  </munit:test>
+
+
+  <!-- R14: no x-correlation-id on the request, a generated one on the response (success). -->
+  <munit:test name="r14-request-without-correlation-id-gets-a-generated-one-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 1, unitPrice: 2.0 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(200)]'/>
+      <munit-tools:assert-that expression="#[sizeOf(attributes.headers.'x-correlation-id' default '') > 0]" is='#[MunitTools::equalTo(true)]'/>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R13, R14: no x-correlation-id on the request, a generated one on the response (error). -->
+  <munit:test name="r13-r14-error-without-correlation-id-gets-a-generated-one-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:error typeId="HTTP:NOT_FOUND"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(404)]'/>
+      <munit-tools:assert-that expression="#[sizeOf(attributes.headers.'x-correlation-id' default '') > 0]" is='#[MunitTools::equalTo(true)]'/>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R8, R19: a statusCode that is a string is not a known code. -->
+  <munit:test name="r8-r19-status-code-as-string-is-502-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: "3", placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 1, unitPrice: 2.0 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-edge-string'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(502)]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The Order Store failed or returned an unexpected answer.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-edge-string")]'/>
+      <munit-tools:verify-call processor="http:request" times="0">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R9, R19: an order without placedAtUtc is an Order Store defect. -->
+  <munit:test name="r9-r19-missing-placed-at-is-502-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, currency: "EUR", lines: [{ productId: "PRD-10", quantity: 1, unitPrice: 2.0 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-edge-placed'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(502)]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The Order Store failed or returned an unexpected answer.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-edge-placed")]'/>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R10, R19: a line without unitPrice is an Order Store defect. -->
+  <munit:test name="r10-r19-missing-unit-price-is-502-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 1 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-edge-price'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(502)]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The Order Store failed or returned an unexpected answer.")]'/>
+      <munit-tools:assert-that expression="#[sizeOf(payload.error)]" is='#[MunitTools::equalTo(3)]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-edge-price")]'/>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R9: milliseconds sent by the Order Store are kept. -->
+  <munit:test name="r9-fractional-seconds-are-kept-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, placedAtUtc: "2026-10-02T14:05:00.250Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 1, unitPrice: 2.0 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(200)]'/>
+      <munit-tools:assert-that expression="#[payload.placedAt]" is='#[MunitTools::equalTo("2026-10-02T14:05:00.250Z")]'/>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R17, R18: one product unreachable and another timed out gives 504 (timeout is the most telling). -->
+  <munit:test name="r17-r18-product-timeout-wins-over-product-unreachable-test">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source value="order-status-api-main"/>
+      <munit:enable-flow-source value="get:\orders\(orderId):order-status-api-config"/>
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 1, unitPrice: 1.0 }, { productId: "PRD-20", quantity: 1, unitPrice: 1.0 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-10'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:error typeId="HTTP:CONNECTIVITY"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/><munit-tools:with-attribute attributeName="uriParams" whereValue="#[{productId: 'PRD-20'}]"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:error typeId="HTTP:TIMEOUT"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <http:request config-ref="order-status-test-client-config" method="GET" path="/api/order-status/orders/ORD-001" doc:name="Call the order status API">
+        <http:headers>#[{'x-correlation-id': 'corr-priority'}]</http:headers>
+        <http:response-validator><http:success-status-code-validator values="100..599"/></http:response-validator>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[attributes.statusCode]" is='#[MunitTools::equalTo(504)]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The Order Store did not answer in time.")]'/>
+      <munit-tools:assert-that expression="#[attributes.headers.'x-correlation-id']" is='#[MunitTools::equalTo("corr-priority")]'/>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R20 (a): the whole handler path with the deadline in the past. The handler maps the budget error to 504 and the
+       Order Store is not called. Called with flow-ref because a deadline cannot be set through HTTP. -->
+  <munit:test name="r20-spent-budget-answers-504-and-calls-no-order-store-test">
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { id: "ORD-001", customerId: "CUST-001", statusCode: 3, placedAtUtc: "2026-10-02T14:05:00Z", currency: "EUR", lines: [{ productId: "PRD-10", quantity: 1, unitPrice: 2.0 }] }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit:set-event>
+        <munit:variables>
+          <munit:variable key="orderId" value="ORD-001"/>
+          <munit:variable key="requestCorrelationId" value="corr-budget"/>
+          <munit:variable key="deadlineMillis" value="#[0]"/>
+        </munit:variables>
+      </munit:set-event>
+    </munit:behavior>
+    <munit:execution>
+      <flow-ref name="order-status-handler"/>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[vars.httpStatus]" is='#[MunitTools::equalTo(504)]'/>
+      <munit-tools:assert-that expression="#[payload.error.code]" is='#[MunitTools::equalTo(504)]'/>
+      <munit-tools:assert-that expression="#[payload.error.reason]" is='#[MunitTools::equalTo("Gateway Timeout")]'/>
+      <munit-tools:assert-that expression="#[payload.error.message]" is='#[MunitTools::equalTo("The Order Store did not answer in time.")]'/>
+      <munit-tools:assert-that expression="#[vars.outboundHeaders.'x-correlation-id']" is='#[MunitTools::equalTo("corr-budget")]'/>
+      <munit-tools:verify-call processor="http:request" times="0">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get order from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+      <munit-tools:verify-call processor="http:request" times="0">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- R20 (b): the deadline check before each product call. The product routes run with the deadline in the past: no
+       product call is made and the error is the timeout type. A try keeps the error, so the validation runs. -->
+  <munit:test name="r20-spent-budget-starts-no-product-call-test">
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+        <munit-tools:then-return><munit-tools:payload value='#[output application/json --- { productId: "PRD-10", name: "Synthetic Widget" }]' mediaType="application/json"/></munit-tools:then-return>
+      </munit-tools:mock-when>
+      <munit:set-event>
+        <munit:variables>
+          <munit:variable key="productIds" value="#[['PRD-10']]"/>
+          <munit:variable key="deadlineMillis" value="#[0]"/>
+          <munit:variable key="effectiveCorrelationId" value="corr-budget"/>
+        </munit:variables>
+      </munit:set-event>
+    </munit:behavior>
+    <munit:execution>
+      <try>
+        <flow-ref name="order-status-read-products"/>
+        <error-handler>
+          <on-error-continue>
+            <set-variable variableName="caughtErrorType" value="#[error.errorType.namespace ++ ':' ++ error.errorType.identifier]"/>
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that expression="#[vars.caughtErrorType]" is='#[MunitTools::equalTo("ORDER_STATUS:STORE_TIMEOUT")]'/>
+      <munit-tools:verify-call processor="http:request" times="0">
+        <munit-tools:with-attributes><munit-tools:with-attribute attributeName="doc:name" whereValue="Get product from the Order Store"/></munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+</mule>

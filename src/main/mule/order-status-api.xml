@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Order status exercise: GET /api/order-status/orders/{orderId}. Independent of customer-lookup. It shares only the
+     HTTP listener config (http-listener-config) and the shape of the error body and of x-correlation-id. -->
+<mule xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:sockets="http://www.mulesoft.org/schema/mule/sockets"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/sockets http://www.mulesoft.org/schema/mule/sockets/current/mule-sockets.xsd
+        http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <!-- Only this exercise's own keys. http.port is not loaded from a file: the shared listener still gets it as a system property. -->
+    <configuration-properties file="order-status.yaml" doc:name="Order status properties"/>
+
+    <apikit:config name="order-status-api-config"
+                   api="api/order-status-api.raml"
+                   outboundHeadersMapName="outboundHeaders"
+                   httpStatusVarName="httpStatus"
+                   doc:name="Order status API router config"/>
+
+    <!-- The Order Store (synthetic, never reachable here). Host, port and protocol are properties (CFG-1); the response
+         timeout is explicit (MERR-3), about 20 times the Order Store's usual 100 ms, and the TCP connect phase has its own timeout. -->
+    <http:request-config name="order-status-store-request-config"
+                         responseTimeout="${orderStore.responseTimeoutMillis}"
+                         doc:name="Order Store HTTP request config">
+        <http:request-connection protocol="${orderStore.protocol}" host="${orderStore.host}" port="${orderStore.port}">
+            <http:client-socket-properties>
+                <sockets:tcp-client-socket-properties connectionTimeout="${orderStore.connectionTimeoutMillis}"/>
+            </http:client-socket-properties>
+        </http:request-connection>
+    </http:request-config>
+
+    <flow name="order-status-api-main"
+          doc:description="Listens on /api/order-status/*, routes to the implementation flow and answers the router's own errors in the shared error body.">
+        <http:listener config-ref="http-listener-config" path="/api/order-status/*" doc:name="Listen for order status requests">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit:router config-ref="order-status-api-config" doc:name="Route by the order status spec"/>
+        <error-handler doc:name="Router errors">
+            <on-error-continue type="APIKIT:BAD_REQUEST" logException="false" doc:name="On bad request">
+                <set-variable variableName="httpStatus" value="#[400]" doc:name="Set status 400"/>
+                <set-payload mimeType="application/json" doc:name="Build the 400 body"
+                             value='#[output application/json --- { error: { code: 400, reason: "Bad Request", message: "The request is invalid." } }]'/>
+                <set-variable variableName="outboundHeaders" value="#[{'x-correlation-id': correlationId}]" doc:name="Set the correlation header"/>
+                <flow-ref name="order-status-log-error" doc:name="Log the error"/>
+            </on-error-continue>
+            <on-error-continue type="APIKIT:NOT_FOUND" logException="false" doc:name="On endpoint not found">
+                <set-variable variableName="httpStatus" value="#[404]" doc:name="Set status 404"/>
+                <set-payload mimeType="application/json" doc:name="Build the 404 body"
+                             value='#[output application/json --- { error: { code: 404, reason: "Not Found", message: "The requested API endpoint does not exist." } }]'/>
+                <set-variable variableName="outboundHeaders" value="#[{'x-correlation-id': correlationId}]" doc:name="Set the correlation header"/>
+                <flow-ref name="order-status-log-error" doc:name="Log the error"/>
+            </on-error-continue>
+            <on-error-continue type="APIKIT:METHOD_NOT_ALLOWED" logException="false" doc:name="On method not allowed">
+                <set-variable variableName="httpStatus" value="#[405]" doc:name="Set status 405"/>
+                <set-payload mimeType="application/json" doc:name="Build the 405 body"
+                             value='#[output application/json --- { error: { code: 405, reason: "Method Not Allowed", message: "The method is not allowed for this endpoint." } }]'/>
+                <set-variable variableName="outboundHeaders" value="#[{'x-correlation-id': correlationId}]" doc:name="Set the correlation header"/>
+                <flow-ref name="order-status-log-error" doc:name="Log the error"/>
+            </on-error-continue>
+            <on-error-continue type="APIKIT:NOT_ACCEPTABLE" logException="false" doc:name="On not acceptable">
+                <set-variable variableName="httpStatus" value="#[406]" doc:name="Set status 406"/>
+                <set-payload mimeType="application/json" doc:name="Build the 406 body"
+                             value='#[output application/json --- { error: { code: 406, reason: "Not Acceptable", message: "No acceptable representation is available." } }]'/>
+                <set-variable variableName="outboundHeaders" value="#[{'x-correlation-id': correlationId}]" doc:name="Set the correlation header"/>
+                <flow-ref name="order-status-log-error" doc:name="Log the error"/>
+            </on-error-continue>
+            <on-error-continue type="APIKIT:UNSUPPORTED_MEDIA_TYPE" logException="false" doc:name="On unsupported media type">
+                <set-variable variableName="httpStatus" value="#[415]" doc:name="Set status 415"/>
+                <set-payload mimeType="application/json" doc:name="Build the 415 body"
+                             value='#[output application/json --- { error: { code: 415, reason: "Unsupported Media Type", message: "The request media type is not supported." } }]'/>
+                <set-variable variableName="outboundHeaders" value="#[{'x-correlation-id': correlationId}]" doc:name="Set the correlation header"/>
+                <flow-ref name="order-status-log-error" doc:name="Log the error"/>
+            </on-error-continue>
+            <on-error-continue type="ANY" logException="false" doc:name="On any other router error">
+                <set-variable variableName="httpStatus" value="#[500]" doc:name="Set status 500"/>
+                <set-payload mimeType="application/json" doc:name="Build the 500 body"
+                             value='#[output application/json --- { error: { code: 500, reason: "Internal Server Error", message: "An internal error occurred." } }]'/>
+                <set-variable variableName="outboundHeaders" value="#[{'x-correlation-id': correlationId}]" doc:name="Set the correlation header"/>
+                <flow-ref name="order-status-log-error" doc:name="Log the error"/>
+            </on-error-continue>
+        </error-handler>
+    </flow>
+
+    <flow name="get:\orders\(orderId):order-status-api-config"
+          doc:description="APIkit implementation flow of GET /orders/{orderId}: keeps the order id and the correlation id, then hands over to order-status-handler.">
+        <set-variable variableName="orderId" value="#[attributes.uriParams.orderId]" doc:name="Keep the order id"/>
+        <set-variable variableName="requestCorrelationId"
+                      value="#[attributes.headers.'x-correlation-id' default correlationId]" doc:name="Keep the request correlation id"/>
+        <flow-ref name="order-status-handler" doc:name="Handle the order status request"/>
+    </flow>
+
+    <sub-flow name="order-status-handler"
+              doc:description="Runs order-status-process and turns each failure into the status and the shared error body of the contract; called by the implementation flow.">
+        <set-variable variableName="effectiveCorrelationId"
+                      value="#[vars.requestCorrelationId default correlationId]" doc:name="Keep the effective correlation id"/>
+        <set-variable variableName="httpStatus" value="#[200]" doc:name="Set status 200"/>
+        <logger level="INFO" category="order-status" doc:name="Log the entry"
+                message="#[output text/plain --- write({ event: 'order-status.entry', correlationId: vars.effectiveCorrelationId, orderId: vars.orderId }, 'application/json', { indent: false })]"/>
+        <try doc:name="Process the order status request">
+            <flow-ref name="order-status-process" doc:name="Process the order status"/>
+            <error-handler doc:name="Order status errors">
+                <on-error-continue type="HTTP:NOT_FOUND" logException="false" doc:name="On order unknown to the Order Store">
+                    <set-variable variableName="httpStatus" value="#[404]" doc:name="Set status 404"/>
+                    <set-payload mimeType="application/json" doc:name="Build the 404 body"
+                                 value='#[output application/json --- { error: { code: 404, reason: "Not Found", message: "The order was not found." } }]'/>
+                    <flow-ref name="order-status-log-error" doc:name="Log the error"/>
+                </on-error-continue>
+                <on-error-continue type="HTTP:TIMEOUT, ORDER_STATUS:STORE_TIMEOUT, ORDER_STATUS:BUDGET_EXCEEDED" logException="false" doc:name="On Order Store timeout">
+                    <set-variable variableName="httpStatus" value="#[504]" doc:name="Set status 504"/>
+                    <set-payload mimeType="application/json" doc:name="Build the 504 body"
+                                 value='#[output application/json --- { error: { code: 504, reason: "Gateway Timeout", message: "The Order Store did not answer in time." } }]'/>
+                    <flow-ref name="order-status-log-error" doc:name="Log the error"/>
+                </on-error-continue>
+                <on-error-continue type="HTTP:CONNECTIVITY, ORDER_STATUS:STORE_UNAVAILABLE" logException="false" doc:name="On Order Store unreachable">
+                    <set-variable variableName="httpStatus" value="#[503]" doc:name="Set status 503"/>
+                    <set-payload mimeType="application/json" doc:name="Build the 503 body"
+                                 value='#[output application/json --- { error: { code: 503, reason: "Service Unavailable", message: "The Order Store cannot be reached." } }]'/>
+                    <flow-ref name="order-status-log-error" doc:name="Log the error"/>
+                </on-error-continue>
+                <on-error-continue type="ANY" logException="false" doc:name="On any other failure">
+                    <set-variable variableName="httpStatus" value="#[502]" doc:name="Set status 502"/>
+                    <set-payload mimeType="application/json" doc:name="Build the 502 body"
+                                 value='#[output application/json --- { error: { code: 502, reason: "Bad Gateway", message: "The Order Store failed or returned an unexpected answer." } }]'/>
+                    <flow-ref name="order-status-log-error" doc:name="Log the error"/>
+                </on-error-continue>
+            </error-handler>
+        </try>
+        <set-variable variableName="outboundHeaders"
+                      value="#[{'x-correlation-id': vars.effectiveCorrelationId}]" doc:name="Set the correlation header"/>
+        <logger level="INFO" category="order-status" doc:name="Log the exit"
+                message="#[output text/plain --- write({ event: 'order-status.exit', correlationId: vars.effectiveCorrelationId, orderId: vars.orderId, status: vars.httpStatus }, 'application/json', { indent: false })]"/>
+    </sub-flow>
+
+    <sub-flow name="order-status-log-error"
+              doc:description="Logs one structured error entry with the correlation id and the error type, never the error description or a payload; called from the error handlers.">
+        <logger level="WARN" category="order-status" doc:name="Log the error entry"
+                message="#[output text/plain --- write({ event: 'order-status.error', correlationId: vars.effectiveCorrelationId default correlationId, orderId: vars.orderId, errorType: (error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '') }, 'application/json', { indent: false })]"/>
+    </sub-flow>
+
+    <sub-flow name="order-status-process"
+              doc:description="Reads the order, checks the Order Store's own rules, reads each distinct product once inside the request budget and builds the response; called by order-status-handler.">
+        <!-- The deadline of the whole request, set once: an outer deadline when the caller set one (a test does), otherwise now plus the budget. -->
+        <set-variable variableName="deadlineMillis" doc:name="Set the request deadline"
+                      value="#[output application/java --- vars.deadlineMillis default ((now() as Number {unit: 'milliseconds'}) + (p('orderStatus.budgetMillis') as Number))]"/>
+        <flow-ref name="order-status-check-deadline" doc:name="Check the deadline before the order call"/>
+        <flow-ref name="order-status-get-order" doc:name="Get the order"/>
+        <set-variable variableName="order" value="#[output application/java --- payload]" doc:name="Keep the order"/>
+        <!-- The Order Store's own rules: at most 20 lines and a known status code. A breach is a defect of the Order Store (502), and no product is read. -->
+        <choice doc:name="Check the order against the Order Store rules">
+            <when expression="#[sizeOf(vars.order.lines default []) > (p('orderStatus.maxLines') as Number)]">
+                <raise-error type="ORDER_STATUS:STORE_FAILURE" description="The order has more lines than the Order Store allows" doc:name="Raise too many lines"/>
+            </when>
+            <when expression="#[isEmpty(dwl::orderStatusMapping::statusName(vars.order.statusCode))]">
+                <raise-error type="ORDER_STATUS:STORE_FAILURE" description="The Order Store sent an unknown status code" doc:name="Raise unknown status code"/>
+            </when>
+        </choice>
+        <set-variable variableName="productIds" doc:name="Keep the distinct product ids"
+                      value="#[output application/java --- dwl::orderStatusMapping::distinctProductIds(vars.order.lines default [])]"/>
+        <choice doc:name="Read the products only when there are any">
+            <when expression="#[not isEmpty(vars.productIds)]">
+                <flow-ref name="order-status-read-products" doc:name="Read the products"/>
+            </when>
+            <otherwise>
+                <set-variable variableName="productNames" value="#[output application/java --- {}]" doc:name="Set no product names"/>
+            </otherwise>
+        </choice>
+        <ee:transform doc:name="Build the order status response">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+import dwl::orderStatusMapping
+output application/json
+---
+orderStatusMapping::toResponse(vars.order, vars.productNames)]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+    </sub-flow>
+
+    <sub-flow name="order-status-get-order"
+              doc:description="Calls GET /orders/{orderId} on the Order Store; its failures (404, timeout, connectivity) reach order-status-handler as HTTP errors; called by order-status-process.">
+        <http:request config-ref="order-status-store-request-config" method="GET" path="/orders/{orderId}"
+                      doc:name="Get order from the Order Store">
+            <http:headers>#[{'x-correlation-id': vars.effectiveCorrelationId}]</http:headers>
+            <http:uri-params>#[{orderId: vars.orderId}]</http:uri-params>
+        </http:request>
+    </sub-flow>
+
+    <sub-flow name="order-status-read-products"
+              doc:description="Reads each distinct product once, in parallel up to a set number at once, and fails the request with the most telling error when a read fails; called by order-status-process.">
+        <!-- Each route catches its own failure and reports it. Without this a failure inside parallel-foreach reaches the caller as MULE:COMPOSITE_ROUTING. -->
+        <parallel-foreach collection="#[vars.productIds]" maxConcurrency="${orderStatus.maxConcurrency}" doc:name="Read each product">
+            <try doc:name="Read one product">
+                <set-variable variableName="productId" value="#[payload]" doc:name="Keep the product id"/>
+                <flow-ref name="order-status-check-deadline" doc:name="Check the deadline before the product call"/>
+                <flow-ref name="order-status-get-product" doc:name="Get the product"/>
+                <set-payload value="#[output application/java --- { ok: true, productId: vars.productId, productName: payload.name default null }]"
+                             doc:name="Report the product name"/>
+                <error-handler doc:name="Report the failure">
+                    <on-error-continue logException="false" doc:name="On a failed product read">
+                        <set-payload value="#[output application/java --- { ok: false, productId: vars.productId, errorType: (error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '') }]"
+                                     doc:name="Report the failure type"/>
+                    </on-error-continue>
+                </error-handler>
+            </try>
+        </parallel-foreach>
+        <set-variable variableName="outcomes" value="#[output application/java --- payload map $.payload]" doc:name="Keep the outcomes"/>
+        <set-variable variableName="failedTypes" value="#[output application/java --- (vars.outcomes filter (not $.ok)) map $.errorType]" doc:name="Keep the failure types"/>
+        <!-- One failed product read fails the request: the contract has no partial answer. Most telling first: time, then unreachable, then the rest. The route reports the error type it saw (HTTP:TIMEOUT, HTTP:CONNECTIVITY or the budget). -->
+        <choice doc:name="Map a failed product read to one error">
+            <when expression="#[(vars.failedTypes contains 'ORDER_STATUS:BUDGET_EXCEEDED') or (vars.failedTypes contains 'HTTP:TIMEOUT')]">
+                <raise-error type="ORDER_STATUS:STORE_TIMEOUT" description="The Order Store did not answer a product read in time" doc:name="Raise Order Store timeout"/>
+            </when>
+            <when expression="#[vars.failedTypes contains 'HTTP:CONNECTIVITY']">
+                <raise-error type="ORDER_STATUS:STORE_UNAVAILABLE" description="The Order Store cannot be reached for a product read" doc:name="Raise Order Store unavailable"/>
+            </when>
+            <when expression="#[not isEmpty(vars.failedTypes)]">
+                <raise-error type="ORDER_STATUS:STORE_FAILURE" description="A product read failed" doc:name="Raise Order Store failure"/>
+            </when>
+        </choice>
+        <set-variable variableName="productNames" doc:name="Keep the product names by id"
+                      value="#[output application/java --- { (vars.outcomes map (o) -> { (o.productId): o.productName }) }]"/>
+    </sub-flow>
+
+    <sub-flow name="order-status-get-product"
+              doc:description="Calls GET /products/{productId} on the Order Store; a product it does not know gives a null name, any other failure propagates to the route; called by each route of order-status-read-products.">
+        <try doc:name="Call the Order Store for the product">
+            <http:request config-ref="order-status-store-request-config" method="GET" path="/products/{productId}"
+                          doc:name="Get product from the Order Store">
+                <http:headers>#[{'x-correlation-id': vars.effectiveCorrelationId}]</http:headers>
+                <http:uri-params>#[{productId: vars.productId}]</http:uri-params>
+            </http:request>
+            <error-handler doc:name="Order Store product errors">
+                <on-error-continue type="HTTP:NOT_FOUND" logException="false" doc:name="On product unknown to the Order Store">
+                    <set-payload value="#[output application/java --- { name: null }]" doc:name="Set a null product name"/>
+                </on-error-continue>
+                <!-- Any other failure goes on to the route, which reports its type; logException="false" keeps the framework from logging it as an ERROR with the backend's own text. -->
+                <on-error-propagate type="ANY" logException="false" doc:name="On any other Order Store failure"/>
+            </error-handler>
+        </try>
+    </sub-flow>
+
+    <sub-flow name="order-status-check-deadline"
+              doc:description="Raises the budget error when the request's deadline has passed, so no further Order Store call starts; called before every Order Store call.">
+        <choice doc:name="Check the request deadline">
+            <when expression="#[(now() as Number {unit: 'milliseconds'}) > vars.deadlineMillis]">
+                <raise-error type="ORDER_STATUS:BUDGET_EXCEEDED" description="The request's time budget is spent" doc:name="Raise budget exceeded"/>
+            </when>
+        </choice>
+    </sub-flow>
+</mule>
