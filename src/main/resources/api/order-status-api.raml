@@ -1,0 +1,218 @@
+#%RAML 1.0
+title: Order Status API
+version: v1
+mediaType: application/json
+baseUri: http://localhost:8081/api/order-status
+description: |
+  System API (API-led layer) over one system of record, the synthetic Order Store. It returns the status of one order in
+  this API's own model: the Order Store's numeric status code, its field names and its error texts are not exposed.
+  Public and synthetic: no security scheme is declared on purpose, because the lab has no identity provider.
+
+  Limits the implementation enforces (all configurable):
+  - an order has at most 20 lines (an Order Store rule); an order that has more is an Order Store defect (502) and no
+    product is read;
+  - every call to the Order Store times out after 2 seconds (504 when it does not answer);
+  - a call that cannot connect fails after 1 second (a separate connection timeout, `orderStore.connectionTimeoutMillis`);
+  - the whole request has a time budget of 5 seconds: no product call starts after it (504);
+  - a healthy Order Store answers in about 100 ms, so a healthy request takes well under a second; the longest a request
+    can take is the budget plus one call timeout (about 7 seconds).
+
+  `placedAt` is the Order Store's `placedAtUtc` in UTC; fractional seconds are kept (three digits) when present and left out when zero.
+
+types:
+  OrderId:
+    type: string
+    pattern: ^ORD-[0-9]{3}$
+    example: ORD-001
+  OrderLine:
+    type: object
+    additionalProperties: false
+    properties:
+      productId: string
+      productName: string | nil
+      quantity: integer
+      lineTotal: number
+    example:
+      productId: PRD-10
+      productName: Synthetic Widget
+      quantity: 2
+      lineTotal: 25
+  OrderTotal:
+    type: object
+    additionalProperties: false
+    properties:
+      amount: number
+      currency: string
+    example:
+      amount: 32.25
+      currency: EUR
+  OrderStatus:
+    type: object
+    additionalProperties: false
+    properties:
+      orderId: OrderId
+      customerId: string
+      status:
+        enum: [RECEIVED, PAID, SHIPPED, DELIVERED, CANCELLED]
+      placedAt: datetime
+      lines:
+        type: array
+        items: OrderLine
+        maxItems: 20
+      orderTotal: OrderTotal
+    example:
+      orderId: ORD-001
+      customerId: CUST-001
+      status: SHIPPED
+      placedAt: 2026-10-02T14:05:00Z
+      lines:
+        - productId: PRD-10
+          productName: Synthetic Widget
+          quantity: 2
+          lineTotal: 25
+        - productId: PRD-20
+          productName: null
+          quantity: 1
+          lineTotal: 7.25
+      orderTotal:
+        amount: 32.25
+        currency: EUR
+  ErrorResponse:
+    type: object
+    additionalProperties: false
+    properties:
+      error:
+        type: object
+        additionalProperties: false
+        properties:
+          code: integer
+          reason: string
+          message: string
+    example:
+      error:
+        code: 404
+        reason: Not Found
+        message: The order was not found.
+
+/orders/{orderId}:
+  uriParameters:
+    orderId:
+      type: OrderId
+  get:
+    description: Returns the status of one order, with its lines (product names read from the Order Store) and its total.
+    securedBy: [null]
+    responses:
+      200:
+        headers:
+          x-correlation-id: string
+        body:
+          application/json:
+            type: OrderStatus
+      400:
+        description: The order id does not match ORD- followed by three digits.
+        headers:
+          x-correlation-id: string
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              error:
+                code: 400
+                reason: Bad Request
+                message: The request is invalid.
+      404:
+        description: The Order Store does not know the order, or the API endpoint does not exist.
+        headers:
+          x-correlation-id: string
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              error:
+                code: 404
+                reason: Not Found
+                message: The order was not found.
+      405:
+        description: Method not allowed for the requested endpoint.
+        headers:
+          x-correlation-id: string
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              error:
+                code: 405
+                reason: Method Not Allowed
+                message: The method is not allowed for this endpoint.
+      406:
+        description: No acceptable representation is available.
+        headers:
+          x-correlation-id: string
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              error:
+                code: 406
+                reason: Not Acceptable
+                message: No acceptable representation is available.
+      415:
+        description: Unsupported request media type.
+        headers:
+          x-correlation-id: string
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              error:
+                code: 415
+                reason: Unsupported Media Type
+                message: The request media type is not supported.
+      500:
+        description: An unexpected error outside the Order Store flow (the router's own).
+        headers:
+          x-correlation-id: string
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              error:
+                code: 500
+                reason: Internal Server Error
+                message: An internal error occurred.
+      502:
+        description: Any other Order Store failure, an unknown statusCode, or an order with more than 20 lines.
+        headers:
+          x-correlation-id: string
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              error:
+                code: 502
+                reason: Bad Gateway
+                message: The Order Store failed or returned an unexpected answer.
+      503:
+        description: The Order Store cannot be reached.
+        headers:
+          x-correlation-id: string
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              error:
+                code: 503
+                reason: Service Unavailable
+                message: The Order Store cannot be reached.
+      504:
+        description: The Order Store did not answer in time, or the request's time budget was spent.
+        headers:
+          x-correlation-id: string
+        body:
+          application/json:
+            type: ErrorResponse
+            example:
+              error:
+                code: 504
+                reason: Gateway Timeout
+                message: The Order Store did not answer in time.

@@ -1,0 +1,17 @@
+# Properties of the order-status exercise only. The lab's listener port (http.port) is not here: it is still a
+# system property, as before (MUnit gets it from dynamicPorts in pom.xml).
+orderStore:
+  protocol: "HTTP"
+  host: "order-store.invalid"
+  port: "8082"
+  # About 20 times the Order Store's usual 100 ms: a healthy answer is never cut, a hung one frees its thread fast.
+  responseTimeoutMillis: "2000"
+  # The TCP connect phase has its own limit, so an unreachable host cannot hold a request for the connector's default.
+  connectionTimeoutMillis: "1000"
+orderStatus:
+  # The whole request: no product call starts after it. Budget plus one call timeout (7 s) is the longest a request takes.
+  budgetMillis: "5000"
+  # An Order Store rule: an order has at most 20 lines. More is an Order Store defect (502).
+  maxLines: "20"
+  # With 20 distinct products and 5 at once, a healthy Order Store (100 ms) answers the products in about 400 ms.
+  maxConcurrency: "5"
